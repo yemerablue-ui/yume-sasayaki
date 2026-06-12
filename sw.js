@@ -1,6 +1,6 @@
 // ユメササヤキ Service Worker
 // アプリシェルをキャッシュしてオフラインでも起動できるようにする
-const CACHE_NAME = 'yume-sasayaki-v1';
+const CACHE_NAME = 'yume-sasayaki-v2';
 const ASSETS = [
   './',
   './index.html',

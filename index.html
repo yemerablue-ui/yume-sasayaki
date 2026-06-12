@@ -215,6 +215,33 @@
     <p class="hint">覚醒させないため、ささやくように小さな音量・ゆっくりした速さを推奨します。iPhone本体の音量も小さめにしておいてください。高品質な声は「設定 &gt; アクセシビリティ &gt; 読み上げコンテンツ &gt; 声」から追加できます。</p>
   </div>
 
+  <div class="card">
+    <div class="row">
+      <label class="field" for="ambientSelect">環境音（入眠待ちの間に流す）</label>
+      <select id="ambientSelect">
+        <option value="rain">雨</option>
+        <option value="waves">波</option>
+        <option value="brown">ブラウンノイズ（低め）</option>
+        <option value="pink">ピンクノイズ（中間）</option>
+        <option value="white">ホワイトノイズ（高め）</option>
+        <option value="none">なし</option>
+      </select>
+    </div>
+    <div class="row">
+      <label class="field" for="ambVolume">環境音の音量 <span id="ambVolumeVal" style="color:var(--moon)">30%</span></label>
+      <input type="range" id="ambVolume" min="0.05" max="1" step="0.05" value="0.3">
+    </div>
+    <div class="row">
+      <label class="field" for="ambAfter">ささやき開始後</label>
+      <select id="ambAfter">
+        <option value="stop">環境音を止める</option>
+        <option value="between">ささやきの合間は流す</option>
+      </select>
+    </div>
+    <button type="button" class="btn btn-test" id="ambPreviewBtn" style="margin:16px 0 0;padding:12px;font-size:.95rem" onclick="toggleAmbientPreview()">環境音を試聴</button>
+    <p class="hint">環境音は端末内で合成するため通信不要・オフラインでも動きます。ささやきが始まる数秒前にゆっくり消音して交代します。音が鳴らない場合は本体のサイレントスイッチ（消音モード）を確認してください。</p>
+  </div>
+
   <button class="btn btn-test" onclick="testSpeak()">テスト再生</button>
   <button class="btn btn-start" onclick="startSession()">おやすみを開始する</button>
   <p class="hint" style="text-align:center;margin-top:14px">
@@ -279,7 +306,10 @@ function saveSettings(){
       text: document.getElementById('dreamText').value,
       rate: document.getElementById('rate').value,
       volume: document.getElementById('volume').value,
-      voice: document.getElementById('voiceSelect').value
+      voice: document.getElementById('voiceSelect').value,
+      ambient: document.getElementById('ambientSelect').value,
+      ambVol: document.getElementById('ambVolume').value,
+      ambAfter: document.getElementById('ambAfter').value
     }));
   } catch(e){ /* プライベートブラウズ等で保存不可の場合は無視 */ }
 }
@@ -298,6 +328,9 @@ function loadSettings(){
     if(s.rate){ document.getElementById('rate').value=s.rate; document.getElementById('rateVal').textContent=s.rate; }
     if(s.volume){ document.getElementById('volume').value=s.volume; document.getElementById('volumeVal').textContent=Math.round(s.volume*100)+'%'; }
     if(s.voice) pendingVoice = s.voice; // 音声リスト読み込み後に適用
+    if(s.ambient && (s.ambient==='none' || AMBIENT_LABELS[s.ambient])) document.getElementById('ambientSelect').value=s.ambient;
+    if(s.ambVol){ document.getElementById('ambVolume').value=s.ambVol; document.getElementById('ambVolumeVal').textContent=Math.round(s.ambVol*100)+'%'; }
+    if(s.ambAfter==='stop' || s.ambAfter==='between') document.getElementById('ambAfter').value=s.ambAfter;
   } catch(e){}
 }
 
@@ -316,6 +349,158 @@ document.getElementById('volume').addEventListener('input', e=>{
 });
 document.getElementById('dreamText').addEventListener('input', saveSettings);
 document.getElementById('voiceSelect').addEventListener('change', saveSettings);
+
+// ---- 環境音 (Web Audio・端末内で合成、音源ファイル不要) ----
+const AMBIENT_LABELS={rain:'雨',waves:'波',brown:'ブラウンノイズ',pink:'ピンクノイズ',white:'ホワイトノイズ'};
+let audioCtx=null;
+const ambBuffers={};
+const amb={src:null,fade:null,vol:null,type:null,playing:false,preview:false};
+
+function ensureAudioCtx(){
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+function ambientType(){ return document.getElementById('ambientSelect').value; }
+
+// ノイズ列を生成する。loopLenはループ周期で、波のうねり位相を境界で一致させるために使う
+function fillNoise(d, type, sr, n, loopLen){
+  if(type==='white'){
+    for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  } else if(type==='pink'){
+    // Paul Kellet 近似フィルタ
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<n;i++){
+      const w=Math.random()*2-1;
+      b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759;
+      b2=0.96900*b2+w*0.1538520; b3=0.86650*b3+w*0.3104856;
+      b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980;
+      d[i]=b0+b1+b2+b3+b4+b5+b6+w*0.5362; b6=w*0.115926;
+    }
+  } else if(type==='brown'){
+    let last=0;
+    for(let i=0;i<n;i++){ const w=Math.random()*2-1; last=(last+0.02*w)/1.02; d[i]=last*3.5; }
+  } else if(type==='rain'){
+    // 地の「ザー」: ホワイトノイズの300Hz〜1.5kHz帯だけを残す
+    let lp=0,low=0;
+    const a1=1-Math.exp(-2*Math.PI*1500/sr);
+    const a2=1-Math.exp(-2*Math.PI*300/sr);
+    for(let i=0;i<n;i++){
+      const w=Math.random()*2-1;
+      lp+=a1*(w-lp);
+      low+=a2*(lp-low);
+      d[i]=lp-low;
+    }
+    // 雨粒: 短い減衰バーストをランダムに散らす
+    const drops=Math.floor(n/sr*150);
+    for(let k=0;k<drops;k++){
+      const pos=Math.floor(Math.random()*(n-sr*0.02));
+      const dur=Math.floor(sr*(0.002+Math.random()*0.009));
+      const amp=0.1+Math.random()*0.45;
+      let pw=0;
+      for(let j=0;j<dur;j++){
+        const w=Math.random()*2-1;
+        d[pos+j]+=(w-pw*0.5)*amp*(1-j/dur);
+        pw=w;
+      }
+    }
+  } else if(type==='waves'){
+    // ブラウンノイズに約9秒周期のうねりを掛ける
+    let last=0;
+    for(let i=0;i<n;i++){
+      const w=Math.random()*2-1; last=(last+0.02*w)/1.02;
+      const sw=0.5*(1-Math.cos(2*Math.PI*3*i/loopLen));
+      d[i]=last*3.5*(0.22+0.78*Math.pow(sw,1.5));
+    }
+  }
+}
+
+function makeAmbientBuffer(ctx, type){
+  const sr=ctx.sampleRate;
+  const seconds=type==='waves'?28:12; // 波はうねり3周期分
+  const len=Math.floor(sr*seconds);
+  const xf=Math.floor(sr*0.6); // ループ境界はクロスフェードで滑らかにつなぐ
+  const buf=ctx.createBuffer(2,len,sr);
+  for(let ch=0;ch<2;ch++){
+    const tmp=new Float32Array(len+xf);
+    fillNoise(tmp,type,sr,len+xf,len);
+    const d=buf.getChannelData(ch);
+    d.set(tmp.subarray(0,len));
+    for(let i=0;i<xf;i++){
+      const w=i/xf;
+      d[i]=tmp[i]*w+tmp[len+i]*(1-w);
+    }
+    let peak=0;
+    for(let i=0;i<len;i++){ const a=Math.abs(d[i]); if(a>peak) peak=a; }
+    const g=peak>0?0.5/peak:1;
+    for(let i=0;i<len;i++) d[i]*=g;
+  }
+  return buf;
+}
+
+function ambientStart(fadeSec){
+  const type=ambientType();
+  if(type==='none') return;
+  const ctx=ensureAudioCtx();
+  if(amb.src) ambientStop(0.1);
+  if(!ambBuffers[type]) ambBuffers[type]=makeAmbientBuffer(ctx,type);
+  const src=ctx.createBufferSource();
+  src.buffer=ambBuffers[type]; src.loop=true;
+  const fade=ctx.createGain();
+  const vol=ctx.createGain();
+  fade.gain.setValueAtTime(0.0001,ctx.currentTime);
+  fade.gain.exponentialRampToValueAtTime(1,ctx.currentTime+Math.max(0.05,fadeSec));
+  vol.gain.value=parseFloat(document.getElementById('ambVolume').value);
+  src.connect(fade); fade.connect(vol); vol.connect(ctx.destination);
+  src.start();
+  amb.src=src; amb.fade=fade; amb.vol=vol; amb.type=type; amb.playing=true;
+}
+
+// フェードのみ(音源は維持)。target=1で復帰、0.0001で無音
+function ambientFade(target, sec){
+  if(!amb.src) return;
+  const g=amb.fade.gain, now=audioCtx.currentTime;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(Math.max(g.value,0.0001),now);
+  g.exponentialRampToValueAtTime(Math.max(target,0.0001),now+sec);
+  amb.playing=target>0.001;
+}
+
+function ambientStop(sec){
+  if(!amb.src) return;
+  const src=amb.src;
+  ambientFade(0.0001,sec);
+  setTimeout(()=>{ try{src.stop()}catch(e){} }, sec*1000+150);
+  amb.src=null; amb.fade=null; amb.vol=null; amb.type=null; amb.playing=false;
+}
+
+function toggleAmbientPreview(){
+  const btn=document.getElementById('ambPreviewBtn');
+  if(amb.preview){
+    amb.preview=false;
+    ambientStop(0.4);
+    btn.textContent='環境音を試聴';
+    return;
+  }
+  if(ambientType()==='none') return;
+  ambientStart(0.8);
+  amb.preview=true;
+  btn.textContent='試聴を停止';
+}
+
+document.getElementById('ambientSelect').addEventListener('change', ()=>{
+  saveSettings();
+  if(amb.preview){
+    if(ambientType()==='none') toggleAmbientPreview();
+    else ambientStart(0.4); // 試聴中に選び直したら即切り替え
+  }
+});
+document.getElementById('ambVolume').addEventListener('input', e=>{
+  document.getElementById('ambVolumeVal').textContent=Math.round(e.target.value*100)+'%';
+  if(amb.vol) amb.vol.gain.setTargetAtTime(parseFloat(e.target.value), audioCtx.currentTime, 0.05);
+  saveSettings();
+});
+document.getElementById('ambAfter').addEventListener('change', saveSettings);
 
 // ---- 音声合成 ----
 let voices=[];
@@ -389,6 +574,11 @@ async function startSession(){
   speechSynthesis.speak(unlock);
 
   saveSettings();
+
+  // 環境音を開始(試聴中ならセッション用に切り替え)
+  if(amb.preview){ amb.preview=false; document.getElementById('ambPreviewBtn').textContent='環境音を試聴'; }
+  if(ambientType()!=='none'){ ambientStart(3); } else { ambientStop(0.2); }
+
   session.active=true;
   session.phase='wait';
   session.doneCount=0;
@@ -408,6 +598,9 @@ async function startSession(){
 
 function tick(){
   if(!session.active) return;
+  // フェード中・読み上げ中は次の予定(nextAt)が未定のため待つ。
+  // このガードがないとspeakOnceが毎秒再実行され読み上げが連打される
+  if(session.phase==='fading' || session.phase==='speaking') return;
   const remain=session.nextAt-Date.now();
   if(remain<=0){
     speakOnce();
@@ -419,43 +612,60 @@ function tick(){
 }
 
 function speakOnce(){
-  session.doneCount++;
+  // まず環境音をゆっくり消音し、静かになってからささやく
+  session.phase='fading';
   document.getElementById('statusText').textContent='ささやいています…';
   document.getElementById('countdown').textContent='♪';
+  let wait=0;
+  if(amb.src && amb.playing){
+    wait=2500;
+    // 「合間は流す」でも最後のささやきの前なら止めてしまう
+    const resume = document.getElementById('ambAfter').value==='between' && session.doneCount+1<cfg.repeat;
+    if(resume) ambientFade(0.0001,2.2);
+    else ambientStop(2.2);
+  }
+  setTimeout(()=>{ if(session.active) reallySpeak(); }, wait);
+}
+
+function reallySpeak(){
+  session.doneCount++;
+  session.phase='speaking';
   speechSynthesis.cancel();
   const u=makeUtterance();
   u.onend=()=>{
-    if(!session.active) return;
+    if(!session.active || session.phase!=='speaking') return;
     if(session.doneCount>=cfg.repeat){
       finishSession();
     }else{
       session.phase='interval';
       session.nextAt=Date.now()+cfg.interval*60*1000;
       document.getElementById('statusText').textContent='つぎのささやきまで';
+      if(amb.src) ambientFade(1,2.5); // 「合間は流す」なら環境音に戻す
       updateNote();
     }
   };
   // onendが発火しない環境向けの保険（発話長を概算して回復）
   const fallbackMs = Math.max(15000, u.text.length*350/u.rate);
   setTimeout(()=>{
-    if(session.active && session.phase!=='interval' && session.doneCount<cfg.repeat
-       && !speechSynthesis.speaking){
+    if(session.active && session.phase==='speaking' && !speechSynthesis.speaking){
       u.onend && u.onend();
     }
   }, fallbackMs+3000);
   speechSynthesis.speak(u);
-  session.phase='speaking';
+  updateNote();
 }
 
 function updateNote(){
-  document.getElementById('progressNote').textContent =
-    `読み上げ ${session.doneCount} / ${cfg.repeat} 回 ・ ${session.doneCount===0? '入眠待ち' : '間隔 '+cfg.interval+'分'}`;
+  let t = `読み上げ ${session.doneCount} / ${cfg.repeat} 回 ・ ${session.doneCount===0? '入眠待ち' : '間隔 '+cfg.interval+'分'}`;
+  if(amb.playing && amb.type) t += ' ・ 環境音: '+AMBIENT_LABELS[amb.type];
+  document.getElementById('progressNote').textContent = t;
 }
 
 function finishSession(){
   document.getElementById('statusText').textContent='すべて完了しました';
   document.getElementById('countdown').textContent='☾';
   document.getElementById('progressNote').textContent='よい夢を。画面はこのままでも、終了しても大丈夫です。';
+  ambientStop(1.5);
   clearInterval(session.timer);
   session.phase='done';
 }
@@ -464,6 +674,9 @@ function stopSession(){
   session.active=false;
   clearInterval(session.timer);
   speechSynthesis.cancel();
+  ambientStop(0.3);
+  amb.preview=false;
+  document.getElementById('ambPreviewBtn').textContent='環境音を試聴';
   if(wakeLock){ wakeLock.release(); wakeLock=null; }
   document.getElementById('sleepScreen').classList.remove('active');
   document.getElementById('setupScreen').style.display='block';
