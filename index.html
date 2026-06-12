@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ユメササヤキ">
+<meta name="theme-color" content="#0d0b1e">
+<title>ユメササヤキ — 夢誘導リーダー</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=Shippori+Mincho:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#e8e4f5;
+    --ink-dim:#9b94b8;
+    --deep:#0d0b1e;
+    --deep2:#161233;
+    --moon:#f5e9c8;
+    --moon-glow:rgba(245,233,200,0.35);
+    --accent:#8d7bff;
+    --accent-soft:rgba(141,123,255,0.18);
+    --danger:#ff8d9e;
+    --radius:18px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 800px at 70% -10%, #241d4f 0%, transparent 55%),
+      radial-gradient(900px 700px at -10% 100%, #1a1440 0%, transparent 60%),
+      var(--deep);
+    color:var(--ink);
+    font-family:"Zen Maru Gothic", -apple-system, sans-serif;
+    line-height:1.7;
+    min-height:100vh;
+    min-height:100dvh;
+    padding:max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
+    overflow-x:hidden;
+  }
+  .stars{position:fixed;inset:0;pointer-events:none;z-index:0;}
+  .stars span{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff;opacity:.5;animation:twinkle 4s ease-in-out infinite;}
+  @keyframes twinkle{0%,100%{opacity:.15}50%{opacity:.6}}
+  @media (prefers-reduced-motion: reduce){
+    .stars span{animation:none;}
+    .moon{animation:none !important;}
+  }
+  .wrap{position:relative;z-index:1;max-width:560px;margin:0 auto;}
+  h1{
+    font-family:"Shippori Mincho", serif;
+    font-size:1.6rem;
+    letter-spacing:.35em;
+    text-align:center;
+    font-weight:700;
+    color:var(--moon);
+    text-shadow:0 0 24px var(--moon-glow);
+    margin-top:6px;
+  }
+  .subtitle{text-align:center;color:var(--ink-dim);font-size:.78rem;letter-spacing:.18em;margin-top:4px;margin-bottom:20px;}
+
+  /* インストール案内バナー */
+  #installHint{
+    display:none;
+    background:rgba(141,123,255,0.12);
+    border:1px solid rgba(141,123,255,0.35);
+    border-radius:var(--radius);
+    padding:14px 16px;
+    margin-bottom:16px;
+    font-size:.8rem;
+    line-height:1.7;
+  }
+  #installHint strong{color:var(--moon);}
+  #installHint .close{
+    float:right;background:none;border:none;color:var(--ink-dim);
+    font-size:1.1rem;cursor:pointer;padding:0 4px;font-family:inherit;
+  }
+
+  .card{
+    background:rgba(22,18,51,0.72);
+    border:1px solid rgba(141,123,255,0.16);
+    border-radius:var(--radius);
+    padding:18px;
+    margin-bottom:16px;
+    backdrop-filter:blur(8px);
+  }
+  label.field{display:block;font-size:.8rem;color:var(--ink-dim);letter-spacing:.08em;margin-bottom:6px;}
+  textarea{
+    width:100%;min-height:110px;resize:vertical;
+    background:rgba(13,11,30,0.7);
+    border:1px solid rgba(141,123,255,0.25);
+    border-radius:12px;color:var(--ink);
+    font-family:inherit;font-size:1rem;line-height:1.8;
+    padding:12px;
+  }
+  textarea:focus, select:focus, input:focus, button:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px;
+  }
+  .row{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:14px;}
+  .row + .row{margin-top:18px;}
+  .row label.field{margin:0;flex:1;}
+  .stepper{display:flex;align-items:center;gap:0;border:1px solid rgba(141,123,255,0.3);border-radius:12px;overflow:hidden;flex-shrink:0;}
+  .stepper button{
+    width:44px;height:44px;background:var(--accent-soft);border:none;color:var(--ink);
+    font-size:1.3rem;font-family:inherit;cursor:pointer;
+  }
+  .stepper .val{min-width:64px;text-align:center;font-size:1rem;font-weight:700;color:var(--moon);}
+  select, input[type=range]{accent-color:var(--accent);}
+  select{
+    background:rgba(13,11,30,0.7);border:1px solid rgba(141,123,255,0.25);
+    border-radius:12px;color:var(--ink);font-family:inherit;font-size:.9rem;
+    padding:10px 12px;max-width:55%;
+  }
+  input[type=range]{flex:1;max-width:55%;}
+  .hint{font-size:.72rem;color:var(--ink-dim);margin-top:8px;line-height:1.6;}
+
+  .btn{
+    display:block;width:100%;border:none;border-radius:14px;
+    font-family:inherit;font-size:1.05rem;font-weight:700;letter-spacing:.1em;
+    padding:16px;cursor:pointer;
+  }
+  .btn-test{background:transparent;border:1px solid rgba(141,123,255,0.4);color:var(--ink);margin-bottom:12px;}
+  .btn-start{
+    background:linear-gradient(135deg,#6a55e8,#8d7bff);
+    color:#fff;box-shadow:0 8px 30px rgba(106,85,232,0.45);
+  }
+  .btn-stop{background:transparent;border:1px solid var(--danger);color:var(--danger);margin-top:20px;}
+
+  /* ---- sleep screen ---- */
+  #sleepScreen{
+    display:none;position:fixed;inset:0;z-index:10;
+    background:#050410;
+    flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:32px;
+  }
+  #sleepScreen.active{display:flex;}
+  .moon{
+    width:140px;height:140px;border-radius:50%;
+    background:radial-gradient(circle at 38% 35%, #fdf6df, #e8d9a8 60%, #c9b884);
+    box-shadow:0 0 60px var(--moon-glow), 0 0 140px rgba(141,123,255,0.2);
+    animation:breathe 6s ease-in-out infinite;
+    margin-bottom:36px;
+  }
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.06);opacity:1}}
+  #statusText{font-family:"Shippori Mincho",serif;font-size:1.1rem;letter-spacing:.2em;color:var(--moon);}
+  #countdown{font-size:2.4rem;font-weight:700;color:var(--ink);letter-spacing:.1em;margin-top:10px;font-variant-numeric:tabular-nums;}
+  #progressNote{font-size:.78rem;color:var(--ink-dim);margin-top:14px;max-width:300px;line-height:1.8;}
+  #wakeWarn{font-size:.72rem;color:var(--danger);margin-top:18px;display:none;max-width:300px;}
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+
+<div class="wrap" id="setupScreen">
+  <h1>ユメササヤキ</h1>
+  <p class="subtitle">DREAM WHISPER — 入眠時 読み聞かせ</p>
+
+  <div id="installHint">
+    <button class="close" onclick="dismissInstallHint()" aria-label="閉じる">×</button>
+    <strong>📲 アプリとして使う：</strong>Safariの共有ボタン
+    <span style="display:inline-block;border:1px solid var(--ink-dim);border-radius:4px;padding:0 5px;font-size:.7rem">↑</span>
+    から<strong>「ホーム画面に追加」</strong>を選ぶと、全画面のアプリとして起動できます。
+  </div>
+
+  <div class="card">
+    <label class="field" for="dreamText">夢にささやく文章</label>
+    <textarea id="dreamText" placeholder="例：あなたは雲の上の巨大な庭園を歩いています。足元には小さな街が広がり、風はあたたかい……">あなたは静かな星空の下、広い草原に立っています。空には大きな月が浮かび、あなたはふわりと浮かび上がって、自由に空を飛びはじめます。</textarea>
+    <p class="hint">夢に出したい情景を、二人称・現在形で具体的に書くと効きやすいと言われています（例：「あなたは〜しています」）。設定と文章は自動保存されます。</p>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label class="field">入眠待ち時間（読み上げ開始まで）</label>
+      <div class="stepper">
+        <button type="button" onclick="step('delay',-5)">−</button>
+        <span class="val"><span id="delayVal">20</span>分</span>
+        <button type="button" onclick="step('delay',5)">＋</button>
+      </div>
+    </div>
+    <div class="row">
+      <label class="field">繰り返し間隔</label>
+      <div class="stepper">
+        <button type="button" onclick="step('interval',-1)">−</button>
+        <span class="val"><span id="intervalVal">5</span>分</span>
+        <button type="button" onclick="step('interval',1)">＋</button>
+      </div>
+    </div>
+    <div class="row">
+      <label class="field">繰り返し回数</label>
+      <div class="stepper">
+        <button type="button" onclick="step('repeat',-1)">−</button>
+        <span class="val"><span id="repeatVal">3</span>回</span>
+        <button type="button" onclick="step('repeat',1)">＋</button>
+      </div>
+    </div>
+    <p class="hint">平均的な入眠（睡眠潜時）は10〜20分。入眠直後の浅い眠り（ヒプナゴジア〜N1）を狙うのが夢誘導の定石です。</p>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label class="field" for="voiceSelect">声</label>
+      <select id="voiceSelect"></select>
+    </div>
+    <div class="row">
+      <label class="field" for="rate">速さ <span id="rateVal" style="color:var(--moon)">0.8</span></label>
+      <input type="range" id="rate" min="0.5" max="1.2" step="0.05" value="0.8">
+    </div>
+    <div class="row">
+      <label class="field" for="volume">音量 <span id="volumeVal" style="color:var(--moon)">40%</span></label>
+      <input type="range" id="volume" min="0.05" max="1" step="0.05" value="0.4">
+    </div>
+    <p class="hint">覚醒させないため、ささやくように小さな音量・ゆっくりした速さを推奨します。iPhone本体の音量も小さめにしておいてください。高品質な声は「設定 &gt; アクセシビリティ &gt; 読み上げコンテンツ &gt; 声」から追加できます。</p>
+  </div>
+
+  <button class="btn btn-test" onclick="testSpeak()">テスト再生</button>
+  <button class="btn btn-start" onclick="startSession()">おやすみを開始する</button>
+  <p class="hint" style="text-align:center;margin-top:14px">
+    開始後は画面を暗いまま点灯し続けます（自動ロック防止）。<br>
+    iPhoneを充電器につなぎ、画面を伏せずに置いてください。
+  </p>
+</div>
+
+<div id="sleepScreen">
+  <div class="moon" aria-hidden="true"></div>
+  <div id="statusText">おやすみなさい</div>
+  <div id="countdown">--:--</div>
+  <p id="progressNote"></p>
+  <p id="wakeWarn">⚠ 画面ロック防止が利用できません。設定 &gt; 画面表示と明るさ &gt; 自動ロック を「なし」にしてください。</p>
+  <button class="btn btn-stop" style="max-width:280px" onclick="stopSession()">終了する</button>
+</div>
+
+<script>
+// ---- Service Worker 登録 (PWA) ----
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW登録失敗', e));
+  });
+}
+
+// ---- インストール案内 ----
+// スタンドアロン起動(=インストール済み)でなければ案内を表示
+(function(){
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('ys_installHintDismissed') === '1'; } catch(e){}
+  if (!isStandalone && !dismissed) {
+    document.getElementById('installHint').style.display = 'block';
+  }
+})();
+function dismissInstallHint(){
+  document.getElementById('installHint').style.display = 'none';
+  try { localStorage.setItem('ys_installHintDismissed', '1'); } catch(e){}
+}
+
+// ---- 星空 ----
+(function(){
+  const s = document.getElementById('stars');
+  for(let i=0;i<60;i++){
+    const d=document.createElement('span');
+    d.style.left=Math.random()*100+'%';
+    d.style.top=Math.random()*100+'%';
+    d.style.animationDelay=(Math.random()*4)+'s';
+    s.appendChild(d);
+  }
+})();
+
+// ---- 設定値 (localStorageに自動保存) ----
+const cfg = { delay:20, interval:5, repeat:3 };
+const limits = { delay:[5,90], interval:[1,30], repeat:[1,10] };
+
+function saveSettings(){
+  try {
+    localStorage.setItem('ys_settings', JSON.stringify({
+      cfg,
+      text: document.getElementById('dreamText').value,
+      rate: document.getElementById('rate').value,
+      volume: document.getElementById('volume').value,
+      voice: document.getElementById('voiceSelect').value
+    }));
+  } catch(e){ /* プライベートブラウズ等で保存不可の場合は無視 */ }
+}
+function loadSettings(){
+  try {
+    const raw = localStorage.getItem('ys_settings');
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.cfg){
+      for(const k of ['delay','interval','repeat']){
+        if(typeof s.cfg[k]==='number') cfg[k]=Math.min(limits[k][1],Math.max(limits[k][0],s.cfg[k]));
+        document.getElementById(k+'Val').textContent=cfg[k];
+      }
+    }
+    if(s.text) document.getElementById('dreamText').value=s.text;
+    if(s.rate){ document.getElementById('rate').value=s.rate; document.getElementById('rateVal').textContent=s.rate; }
+    if(s.volume){ document.getElementById('volume').value=s.volume; document.getElementById('volumeVal').textContent=Math.round(s.volume*100)+'%'; }
+    if(s.voice) pendingVoice = s.voice; // 音声リスト読み込み後に適用
+  } catch(e){}
+}
+
+function step(key, d){
+  cfg[key]=Math.min(limits[key][1], Math.max(limits[key][0], cfg[key]+d));
+  document.getElementById(key+'Val').textContent=cfg[key];
+  saveSettings();
+}
+document.getElementById('rate').addEventListener('input', e=>{
+  document.getElementById('rateVal').textContent=e.target.value;
+  saveSettings();
+});
+document.getElementById('volume').addEventListener('input', e=>{
+  document.getElementById('volumeVal').textContent=Math.round(e.target.value*100)+'%';
+  saveSettings();
+});
+document.getElementById('dreamText').addEventListener('input', saveSettings);
+document.getElementById('voiceSelect').addEventListener('change', saveSettings);
+
+// ---- 音声合成 ----
+let voices=[];
+let pendingVoice=null;
+function loadVoices(){
+  voices = speechSynthesis.getVoices();
+  const sel=document.getElementById('voiceSelect');
+  sel.innerHTML='';
+  const ja=voices.filter(v=>v.lang && v.lang.startsWith('ja'));
+  const list = ja.length? ja : voices;
+  list.forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v.name; o.textContent=v.name+(v.lang?` (${v.lang})`:'');
+    sel.appendChild(o);
+  });
+  // 保存済みの声 > Kyoko等の日本語音声 の優先順で選択
+  if(pendingVoice && list.some(v=>v.name===pendingVoice)){
+    sel.value=pendingVoice;
+  } else {
+    const pref=list.find(v=>/kyoko|o-?ren|hattori/i.test(v.name));
+    if(pref) sel.value=pref.name;
+  }
+}
+loadVoices();
+loadSettings();
+loadVoices(); // 保存済みの声を反映するため再実行
+if (speechSynthesis.onvoiceschanged !== undefined){
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function makeUtterance(){
+  const u = new SpeechSynthesisUtterance(document.getElementById('dreamText').value || 'よい夢を。');
+  const name=document.getElementById('voiceSelect').value;
+  const v=voices.find(v=>v.name===name);
+  if(v) u.voice=v;
+  u.lang = (v && v.lang) || 'ja-JP';
+  u.rate = parseFloat(document.getElementById('rate').value);
+  u.volume = parseFloat(document.getElementById('volume').value);
+  u.pitch = 0.95;
+  return u;
+}
+function testSpeak(){
+  speechSynthesis.cancel();
+  speechSynthesis.speak(makeUtterance());
+}
+
+// ---- Wake Lock（画面スリープ防止） ----
+let wakeLock=null;
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', ()=>{ wakeLock=null; });
+      return true;
+    }
+  }catch(e){ console.warn('WakeLock失敗', e); }
+  return false;
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && session.active) requestWakeLock();
+});
+
+// ---- セッション ----
+const session = { active:false, timer:null, phase:'wait', nextAt:0, doneCount:0 };
+
+async function startSession(){
+  // iOSではユーザー操作起点でないとTTSが鳴らないため、ここで無音の発話をして「解錠」する
+  speechSynthesis.cancel();
+  const unlock=new SpeechSynthesisUtterance(' ');
+  unlock.volume=0;
+  speechSynthesis.speak(unlock);
+
+  saveSettings();
+  session.active=true;
+  session.phase='wait';
+  session.doneCount=0;
+  session.nextAt=Date.now()+cfg.delay*60*1000;
+
+  document.getElementById('setupScreen').style.display='none';
+  document.getElementById('sleepScreen').classList.add('active');
+  document.getElementById('statusText').textContent='おやすみなさい';
+  updateNote();
+
+  const ok=await requestWakeLock();
+  document.getElementById('wakeWarn').style.display = ok? 'none':'block';
+
+  session.timer=setInterval(tick, 1000);
+  tick();
+}
+
+function tick(){
+  if(!session.active) return;
+  const remain=session.nextAt-Date.now();
+  if(remain<=0){
+    speakOnce();
+    return;
+  }
+  const m=Math.floor(remain/60000), s=Math.floor((remain%60000)/1000);
+  document.getElementById('countdown').textContent =
+    String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+function speakOnce(){
+  session.doneCount++;
+  document.getElementById('statusText').textContent='ささやいています…';
+  document.getElementById('countdown').textContent='♪';
+  speechSynthesis.cancel();
+  const u=makeUtterance();
+  u.onend=()=>{
+    if(!session.active) return;
+    if(session.doneCount>=cfg.repeat){
+      finishSession();
+    }else{
+      session.phase='interval';
+      session.nextAt=Date.now()+cfg.interval*60*1000;
+      document.getElementById('statusText').textContent='つぎのささやきまで';
+      updateNote();
+    }
+  };
+  // onendが発火しない環境向けの保険（発話長を概算して回復）
+  const fallbackMs = Math.max(15000, u.text.length*350/u.rate);
+  setTimeout(()=>{
+    if(session.active && session.phase!=='interval' && session.doneCount<cfg.repeat
+       && !speechSynthesis.speaking){
+      u.onend && u.onend();
+    }
+  }, fallbackMs+3000);
+  speechSynthesis.speak(u);
+  session.phase='speaking';
+}
+
+function updateNote(){
+  document.getElementById('progressNote').textContent =
+    `読み上げ ${session.doneCount} / ${cfg.repeat} 回 ・ ${session.doneCount===0? '入眠待ち' : '間隔 '+cfg.interval+'分'}`;
+}
+
+function finishSession(){
+  document.getElementById('statusText').textContent='すべて完了しました';
+  document.getElementById('countdown').textContent='☾';
+  document.getElementById('progressNote').textContent='よい夢を。画面はこのままでも、終了しても大丈夫です。';
+  clearInterval(session.timer);
+  session.phase='done';
+}
+
+function stopSession(){
+  session.active=false;
+  clearInterval(session.timer);
+  speechSynthesis.cancel();
+  if(wakeLock){ wakeLock.release(); wakeLock=null; }
+  document.getElementById('sleepScreen').classList.remove('active');
+  document.getElementById('setupScreen').style.display='block';
+}
+</script>
+</body>
+</html>
